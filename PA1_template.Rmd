@@ -1,20 +1,88 @@
 # Reproducible Research: Peer Assessment 1
 
-
 ## Loading and preprocessing the data
-
-
+```{r echo=TRUE}
+amd <- read.table("activity.csv", header=TRUE, sep=",", na.strings="NA")
+amd$date <- as.Date(amd$date)
+```
 
 ## What is mean total number of steps taken per day?
-
-
+- Make a histogram of the total number of steps taken each day
+```{r echo=TRUE}
+library(ggplot2)
+attach(amd)
+qplot(date, steps, geom="bar", stat="identity")
+detach(amd)
+```
+- Calculate and report the mean and median total number of steps taken per day
+```{r echo=TRUE}
+library(sqldf)
+final<-amd[complete.cases(amd$steps),]
+newtab <- sqldf("select sum(steps) as sum_steps, avg(steps) as avg_steps, date from final group by date")
+newtab
+```
 
 ## What is the average daily activity pattern?
-
-
+- Make a time series plot (i.e. type = "l") of the 5-minute interval (x-axis) and the average number of steps taken, averaged across all days (y-axis)
+```{r echo=TRUE}
+dap <- sqldf("select avg(steps) as avg_int_steps, interval from final group by interval")
+plot(dap$interval, dap$avg_int_steps, type="l", xlab="5-minute interval", ylab="Average number of steps taken")
+```
+-Which 5-minute interval, on average across all the days in the dataset, contains the maximum number of steps?
+```{r echo=TRUE}
+max(dap$avg_int_steps)
+```
 
 ## Imputing missing values
-
-
+- Calculate and report the total number of missing values in the dataset 
+```{r echo=TRUE}
+sum(!complete.cases(amd$steps))
+```
+- Devise a strategy for filling in all of the missing values in the dataset. 
+- Create a new dataset that is equal to the original dataset but with the missing data filled in.
+```{r echo=TRUE}
+line <- nrow(amd)
+length <- nrow(dap)
+for (i in 1:line){
+        if (is.na(amd$steps[i])){
+                for (j in 1:length){
+                        if (amd$interval[i]==dap$interval[j])
+                                break
+                }
+                amd$steps[i] <- dap[j,1]
+        }
+}
+newamd <- amd
+amd <- read.table("activity.csv", header=TRUE, sep=",", na.strings="NA")
+```
+- Make a histogram of the total number of steps taken each day and Calculate and report the mean and median total number of steps taken per day.
+```{r}
+attach(newamd)
+qplot(date, steps, geom="bar", stat="identity")
+detach(newamd)
+newtab2 <- sqldf("select sum(steps) as sum_steps, avg(steps) as avg_steps, date from newamd group by date")
+newtab2
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+-Create a new factor variable in the dataset.
+```{r}
+newamd <- transform(newamd, date = weekdays(as.Date(newamd$date, "%Y-%m-%d")))
+long <- nrow(newamd)
+for (x in 1:long){
+        if(newamd$date[x]=="星期日"){
+                newamd$date[x]<-"Weekend"
+        }else if(newamd$date[x]=="星期六"){
+                newamd$date[x]<-"Weekend"
+        }else
+                newamd$date[x]<-"Weekday"
+}
+amdweekend <- subset(newamd, date=="Weekend", select=steps:interval)
+amdweekday <- subset(newamd, date=="Weekday", select=steps:interval)
+newweekend <- sqldf("select avg(steps) as avg_steps, interval, date from amdweekend group by interval")
+newweekday <- sqldf("select avg(steps) as avg_steps, interval, date from amdweekday group by interval")
+newamd <- rbind(newweekend, newweekday)
+library(lattice)
+xyplot(avg_steps ~ interval|date,type="l",data = newamd, layout = c(1, 2), xlab="Interval", ylab="Number of steps")
+```
+
